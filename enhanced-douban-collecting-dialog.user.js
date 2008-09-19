@@ -2,7 +2,7 @@
 // Enhanced Douban Collecting Dialog
 // a greasemonkey script offers del.icio.us-style douban subject
 // collecting experience
-// Version: 0.3.1
+// Version: 0.3.2
 // Copyright (c) 2008 Wu Yuntao <http://luliban.com/blog/>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -70,7 +70,7 @@ $.fn.collect = function(options) {
                 $('#showtags').html('缩起 ▲');
                 $('#advtags').show();
                 $('#foldcollect').val('U');
-                set_overlay();
+                refine_dialog();
             };
             if (!unsafeWindow.DOUBAN) {
                 console.log("Fetch douban api and parser");
@@ -84,7 +84,10 @@ $.fn.collect = function(options) {
     }
 
     // Copied from /js/douban13359.js
-    function set_overlay() {
+    function refine_dialog() {
+        var top = ($(window).height() - $('#dialog').height()) / 2 + 140;
+        console.log(top);
+	    $('#dialog,#overlay').css('top', top);
         var oheight = ($.browser.msie?11:26),
             dialog = $('#dialog')[0],
             w = dialog.offsetWidth,
