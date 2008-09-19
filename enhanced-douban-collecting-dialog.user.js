@@ -107,6 +107,7 @@ $.fn.collect = function(options) {
 function TagSuggest(dialog) {
     var tag_list = new Array();
     var done = false;
+    var category = parser.category();
 
     // start fetching
     tag_fetch(1);
@@ -127,7 +128,7 @@ function TagSuggest(dialog) {
             maxresults: 50,
             callback: tag_parse
         };
-        method_dict[parser.category()](params);
+        method_dict[category](params);
     }
 
     // parse titles of tags
@@ -158,6 +159,7 @@ function TagSuggest(dialog) {
         if (!done) {
             window.setTimeout(tag_wait, 100);
         } else {
+            console.log('All tags have been fetched. Ready to suggest');
             dialog.find('input[name="tags"]').attr('autocomplete', 'off');
             dialog.find('input[name="tags"]').tagSuggest({
                 tags: tag_list,
@@ -176,10 +178,9 @@ function TagSuggest(dialog) {
 // Douban Page Parser which may change frequently
 function Parser() {
     // initialize parameters necessary
+    this._subject_category = null;
     this._user_id = null;
-    this.category_dict = {
-        '书': 'book', '杂志': 'book', '电影': 'movie', '唱片': 'music'
-    };
+    this.category_dict = { 'C': 'book', 'M': 'movie', 'W': 'music' };
 };
 
 $.extend(Parser.prototype, {
@@ -200,12 +201,38 @@ $.extend(Parser.prototype, {
 
     // get category
     category: function() {
-        var title = $('#dialog').find('h2').html();
-        if (title.match(/(书|杂志)/)) return 'book';
-        else if (title.match(/电影|电视剧/)) return 'movie';
-        else if (title.match(/唱片/)) return 'music';
-        else throw new Error('Invalid category');
-        return null;
+        // parse category from window.location.href where urls match:
+        // '^/(movie|book/music)/mine?status=(wish|collect|do)',
+        // '^/(movie|book/music)/(recommended|top250|(tag/.*))',
+        // '^/people/.*/(movie|book/music)tags/.*',
+        var cate = window.location.href.match(/(book|movie|music)/);
+        if (cate != null) {
+            this._subject_category = cate[1];
+        }
+        // parse category from name of recommand button where urls match:
+        // '^/subject/.*',
+        else if ($('.a_rec_btn').html() != null) {
+            // a quick solution to get category code via name of recommand button;
+            // like 'rbtn-M-2078864-'
+            var code = $('.a_rec_btn').attr('name').split('-')[1];
+            this._subject_category = this.category_dict[code];
+        }
+        // parse title of dialog
+        // like '我看过这本书...'
+        else {
+            var title = $('#dialog').find('h2').html();
+            if (title.match(/(书|杂志)/)) {
+                this._subject_category = 'book';
+            } else if (title.match(/电影|电视剧/)) {
+                this._subject_category = 'movie';
+            } else if (title.match(/唱片/)) {
+                this._subject_category = 'music';
+            } else {
+                throw new Error("CategoryNotFound: Can not find the category of the subject which is needed for tag suggestion. Please report the URL, " + location.href + "to douban group, http://www.douban.com/group/topic/3293752/");
+            }
+        }
+        // console.log(this._subject_category);
+        return this._subject_category;
     },
 });
 /* }}} */
