@@ -228,7 +228,7 @@ $.extend(Parser.prototype, {
             } else if (title.match(/唱片/)) {
                 this._subject_category = 'music';
             } else {
-                throw new Error("CategoryNotFound: Can not find the category of the subject which is needed for tag suggestion. Please report the URL, " + location.href + "to douban group, http://www.douban.com/group/topic/3293752/");
+                console.log("CategoryNotFound: Can not find the category of the subject which is needed for tag suggestion. Please report the URL, " + location.href + "to douban group, http://www.douban.com/group/topic/3293752/");
             }
         }
         // console.log(this._subject_category);
