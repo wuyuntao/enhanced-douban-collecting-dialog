@@ -1,7 +1,8 @@
+// {{{ === License ===  
 // Enhanced Douban Collecting Dialog
 // a greasemonkey script offers del.icio.us-style douban subject
 // collecting experience
-// Version: 0.2
+// Version: 0.3
 // Copyright (c) 2008 Wu Yuntao <http://luliban.com/blog/>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -30,209 +31,63 @@
 //
 // ==UserScript==
 // @name            Enhanced Douban Collecting Dialog 
-// @namespace       http://luliban.com/blog/
+// @namespace       http://blog.luliban.com/
 // @description     a greasemonkey script offers del.icio.us-style douban subject collecting experience
-// @include         http://www.douban.com/subject/*
-// @include         http://www.douban.com/*/mine?status=*
-// @include         http://www.douban.com/people/*/*tags/*
-// @include         http://www.douban.com/*/recommended
-// @include         http://www.douban.com/*/top250
-// @include         http://www.douban.com/*/tag/*
+// @include         http://www.douban.com/*
+// @require         http://www.douban.com/js/jquery5685.js
 // ==/UserScript==
+//
+// }}}
 
+/* {{{ === Global variables ===  
+ */
+var console = unsafeWindow.console || { log: function() {} };
+var parser = null;
+/* }}} */
 
-// check if jquery's loaded
-function GM_wait() {
-    if (typeof unsafeWindow.jQuery == 'undefined') {
-        window.setTimeout(GM_wait, 100);
-    } else { 
-        window.$ = unsafeWindow.jQuery;
+/* {{{ === Collecting dialog ===  
+ */
+$.fn.collect = function(options) {
+    if (!this.length) return this;
 
-        window.parser = new Parser();
-        parser.buttons().click(function() {
-            dialog_wait();
-        });
-    }
-}
+    var options = $.extend({
+        tagFolder: true
+    }, options || {});
 
-// check if dialog's loaded
-function dialog_wait() {
-    var dialog = $('#dialog');
-    if (dialog.html() == null || dialog.children().attr('class') == 'loadpop') {
-        window.setTimeout(dialog_wait, 100);
-    } else {
-        // feature functions goes here
-        add_delete_button(dialog);
-        move_collect_buttons(dialog);
-        // load douban api initially
-        if (typeof unsafeWindow.DOUBAN == 'undefined') {
-            $.getScript('/js/api.js?v=2', function() {
-                $.getScript('/js/api-parser.js?v=1', function() {
-                    window.DOUBAN = unsafeWindow.DOUBAN;
-                    DOUBAN.apikey = '9e339c9d951cdb9cda9ad5d8bf5692d4';
-                    new TagSuggest(dialog);
-                });
-            });
+    this.click(function() {
+        dialog_wait();
+    });
+
+    /* Wait until dialog loaded
+     */
+    function dialog_wait() {
+        var dialog = $('#dialog');
+        if (dialog.html() == null || dialog.children().attr('class') == 'loadpop') {
+            window.setTimeout(dialog_wait, 100);
         } else {
+            console.log("Dialog loaded");
+            if (options.tagFolder == false) {
+                $('#showtags').html('缩起 ▲');
+                $('#advtags').show();
+                $('#foldcollect').val('U');
+            };
+            if (!unsafeWindow.DOUBAN) {
+                console.log("Fetch douban api and parser");
+                $.ajax({ async: false, dataType: 'script', url: '/js/api.js?v=2' });
+                $.ajax({ async: false, dataType: 'script', url: '/js/api-parser.js?v=1' });
+                window.DOUBAN = unsafeWindow.DOUBAN;
+                DOUBAN.apikey = '9e339c9d951cdb9cda9ad5d8bf5692d4';
+            }
             new TagSuggest(dialog);
         }
     }
 }
 
+/* }}} */
 
-// Douban Page Parser which may change frequently
-function Parser() {
-    // initialize parameters necessary
-    this._collecting_buttons = null;
-    this._collecting_description = null;
-    this._collecting_interest = null;
-    this._subject_category = null;
-    this._subject_id = null;
-    this._user_id = null;
-
-    this.category_dict = {
-        'C': 'book',
-        'M': 'movie',
-        'W': 'music'
-    };
-
-    this.parse_user_id();
-};
-
-(function(Parser) {
-    // get collecting buttons those classname is a_collect_btn
-    Parser.prototype.buttons = function() {
-        if (this._collecting_buttons == null) {
-            this._collecting_buttons = $('a.a_collect_btn');
-        }
-        return this._collecting_buttons;
-    };
-
-    // get category
-    Parser.prototype.category = function() {
-        if (this._subject_category == null) {
-
-            // parse category from window.location.href where urls match:
-            // '^/(movie|book/music)/mine?status=(wish|collect|do)',
-            // '^/(movie|book/music)/(recommended|top250|(tag/.*))',
-            // '^/people/.*/(movie|book/music)tags/.*',
-            var cate = window.location.href.match(/(book|movie|music)/);
-            if (cate != null) {
-                this._subject_category = cate[1];
-            } 
-
-            // parse category from name of recommand button where urls match:
-            // '^/subject/.*',
-            else if ($('.a_rec_btn').html() != null) {
-                // a quick solution to get category code via name of recommand button;
-                // like 'rbtn-M-2078864-'
-                var code = $('.a_rec_btn').attr('name').split('-')[1];
-                this._subject_category = this.category_dict[code];
-            }
-            
-            // if category not parsed, raise an exception
-            else {
-                throw('NotFindCategoryError');
-                alert('I can not find category of the subject which you are going to collect.');
-            }
-
-        }
-        return this._subject_category;
-    };
-
-    // get description
-    Parser.prototype.description = function(dialog) {
-        // a quick solution to get description from title string of the dialog
-        // like '我最近在读这本书   · · · · · · '
-        var desc = dialog.find('h2').text().match(/^我(.*)\ (.*)/);
-        return this._collecting_description = (desc == null) ? '' : desc[1];
-    };
-
-    // get interest
-    Parser.prototype.interest = function(dialog) {
-        return this._collecting_interest = dialog.find('input[@name="interest"]').val();
-    };
-
-    // get subject id
-    Parser.prototype.subject_id = function(dialog) {
-        // a quick solution to get subject_id via form action of the dialog
-        // like '/j/subject/3011224/interest'
-        var sid = dialog.find('form').attr('action').split('/')[3];
-        return this._subject_id = sid;
-    };
-
-    // get user id
-    Parser.prototype.user_id = function() {
-        return this._user_id;
-    };
-
-    Parser.prototype.parse_user_id = function() {
-        // solve the scope problem
-        var instance = this;
-        // access a subject page to get the user's id
-        $.get('/subject/3024234/', function(data) {
-            instance._user_id = 
-                data.match(/href=\"\/people\/(\w+)\/recs\?add=W(\d+)\"\ class=\"j\ a_rec_btn/)[1];
-        });
-    }
-})(Parser);
-
-
-// add a deleted collect button
-function add_delete_button(dialog) {
-    var c_interest = parser.interest(dialog);
-    if (c_interest) {
-        dialog.find('tr#submits span.rr')
-              .prepend('<input type="submit" name="delete" class="delete_collect_btn" value="删除"></input>');
-        $('.delete_collect_btn').click(function() {
-            delete_collection(parser.category(), c_interest, parser.subject_id(dialog));
-            return false;
-        });
-    }
-}
-
-// delect collections via getting url like "/movie/mine?decollect=3011225" and reload page
-function delete_collection(category, interest, id) {
-    var action_dict = {
-        'do': 'undo',
-        'collect': 'decollect',
-        'wish': 'unwish'
-    };
-    var url = '/' + category + '/mine?' + action_dict[interest] + '=' + id;
-    $.get(url, function() {
-        window.location.reload();
-    });
-}
-
-
-// re-arrange button positions
-function move_collect_buttons(dialog) {
-    var submits = dialog.find('tr#submits');
-    var left_submits = submits.find('span.ll');
-    var right_submits = submits.find('span.rr');
-
-    var interest_list = ["collect", "do", "wish"];
-    var c_interest = parser.interest(dialog);
-    var collect_button, do_button, wish_button;
-
-    $.each(interest_list, function() {
-        var button = this + '_button';
-        if (c_interest == this) {
-            // if is current interest, get and modify the save button
-            eval(this + '_button = left_submits.children(\'input[@name="save"]\')');
-            eval(this + '_button.val(parser.description(dialog)).css("font-weight", "bold");');
-        } else {
-            eval(this + '_button = right_submits.children(\'input[@name="' + this + '"]\')');
-        }
-    });
-
-    // move all buttons to left submits area
-    collect_button.appendTo(left_submits)
-    // ordering from left to right: collect, do, wish
-                  .after(wish_button).after("&nbsp;&nbsp;").after(do_button).after("&nbsp;&nbsp;");
-}
-
-// add tag suggestion
+/* {{{ === Douban tag suggestion ===  
+ * add tag suggestion
+ */
 function TagSuggest(dialog) {
     var tag_list = new Array();
     var done = false;
@@ -287,7 +142,8 @@ function TagSuggest(dialog) {
         if (!done) {
             window.setTimeout(tag_wait, 100);
         } else {
-            dialog.find('input[@name="tags"]').tagSuggest({
+            dialog.find('input[name="tags"]').attr('autocomplete', 'off');
+            dialog.find('input[name="tags"]').tagSuggest({
                 tags: tag_list,
                 matchClass: 'tag-matches',
                 tagContainer : 'ul', 
@@ -296,18 +152,73 @@ function TagSuggest(dialog) {
             });
         }
     }
-
 }
+/* }}} */
 
+/* {{{ === Douban parser ===  
+ */
+// Douban Page Parser which may change frequently
+function Parser() {
+    // initialize parameters necessary
+    this._subject_category = null;
+    this._user_id = null;
+    this.category_dict = { 'C': 'book', 'M': 'movie', 'W': 'music' };
+};
 
-// Script entry
-GM_wait();
+$.extend(Parser.prototype, {
+    // get user id
+    user_id: function() {
+        if (!this._user_id) {
+            var user_id = null;
+            // access a subject page to get the user's id
+            $.ajax({ async: false, url: '/subject/3024234/', success:
+                function(data) {
+                    user_id = data.match(/href=\"\/people\/(\w+)\/recs\?add=W(\d+)\"\ class=\"j\ a_rec_btn/)[1];
+                }
+            });
+            this._user_id = user_id;
+        }
+        return this._user_id;
+    },
 
+    // get category
+    category: function() {
+        if (this._subject_category == null) {
+            // parse category from window.location.href where urls match:
+            // '^/(movie|book/music)/mine?status=(wish|collect|do)',
+            // '^/(movie|book/music)/(recommended|top250|(tag/.*))',
+            // '^/people/.*/(movie|book/music)tags/.*',
+            var cate = window.location.href.match(/(book|movie|music)/);
+            if (cate != null) {
+                this._subject_category = cate[1];
+            } 
+            // parse category from name of recommand button where urls match:
+            // '^/subject/.*',
+            else if ($('.a_rec_btn').html() != null) {
+                // a quick solution to get category code via name of recommand button;
+                // like 'rbtn-M-2078864-'
+                var code = $('.a_rec_btn').attr('name').split('-')[1];
+                this._subject_category = this.category_dict[code];
+            }
+            // if category not parsed, raise an exception
+            else {
+                throw new Error('NotFindCategoryError: Can not find category of the subject which you are going to collect.');
+            }
+        }
+        return this._subject_category;
+    },
+});
+/* }}} */
 
-// ==================================================
-// jQuery plugin: tag-suggest
-// ==================================================
-/*
+/* {{{ === Main entry ===  
+ */
+$(function() {
+    parser = new Parser();
+    $('.a_collect_btn').collect({ tagFolder: false });
+});
+/* }}} */
+
+/* {{{ === jQuery tag suggestion plugin ===  
   @author: remy sharp / http://remysharp.com
   @url: http://remysharp.com/2007/12/28/jquery-tag-suggestion/
   @usage: setGlobalTags(['javascript', 'jquery', 'java', 'json']); 
@@ -575,3 +486,4 @@ GM_wait();
         });
     };
 })($);
+/* }}} */
