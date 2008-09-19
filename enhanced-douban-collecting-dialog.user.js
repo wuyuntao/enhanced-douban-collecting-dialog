@@ -2,7 +2,7 @@
 // Enhanced Douban Collecting Dialog
 // a greasemonkey script offers del.icio.us-style douban subject
 // collecting experience
-// Version: 0.3.2
+// Version: 0.3.3
 // Copyright (c) 2008 Wu Yuntao <http://luliban.com/blog/>
 //
 // This program is free software: you can redistribute it and/or modify
@@ -176,9 +176,10 @@ function TagSuggest(dialog) {
 // Douban Page Parser which may change frequently
 function Parser() {
     // initialize parameters necessary
-    this._subject_category = null;
     this._user_id = null;
-    this.category_dict = { 'C': 'book', 'M': 'movie', 'W': 'music' };
+    this.category_dict = {
+        '书': 'book', '杂志': 'book', '电影': 'movie', '唱片': 'music'
+    };
 };
 
 $.extend(Parser.prototype, {
@@ -199,29 +200,12 @@ $.extend(Parser.prototype, {
 
     // get category
     category: function() {
-        if (this._subject_category == null) {
-            // parse category from window.location.href where urls match:
-            // '^/(movie|book/music)/mine?status=(wish|collect|do)',
-            // '^/(movie|book/music)/(recommended|top250|(tag/.*))',
-            // '^/people/.*/(movie|book/music)tags/.*',
-            var cate = window.location.href.match(/(book|movie|music)/);
-            if (cate != null) {
-                this._subject_category = cate[1];
-            } 
-            // parse category from name of recommand button where urls match:
-            // '^/subject/.*',
-            else if ($('.a_rec_btn').html() != null) {
-                // a quick solution to get category code via name of recommand button;
-                // like 'rbtn-M-2078864-'
-                var code = $('.a_rec_btn').attr('name').split('-')[1];
-                this._subject_category = this.category_dict[code];
-            }
-            // if category not parsed, raise an exception
-            else {
-                throw new Error('NotFindCategoryError: Can not find category of the subject which you are going to collect.');
-            }
-        }
-        return this._subject_category;
+        var title = $('#dialog').find('h2').html();
+        if (title.match(/(书|杂志)/)) return 'book';
+        else if (title.match(/电影|电视剧/)) return 'movie';
+        else if (title.match(/唱片/)) return 'music';
+        else throw new Error('Invalid category');
+        return null;
     },
 });
 /* }}} */
